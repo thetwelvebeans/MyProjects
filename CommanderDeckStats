@@ -1,0 +1,366 @@
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+import pandas as pd
+import numpy as np
+from sklearn import linear_model
+import sklearn
+import pickle
+
+
+
+def Join (list, w):
+    string = ""
+    for i in range(0, len(list)):
+        if i == len(list) - 1:
+            string = string + list[i]
+        else:
+            string = string + list[i] + w
+    return string
+
+
+def GetDeck (deckName):
+    try:
+        with open(f"Decks/{deckName}/Check", "r") as f:
+            for line in f.readlines():
+                pass
+
+        with open(f"Decks/{deckname}/Decklist", "r") as f:
+            for line in f.readlines():
+                card = Join(line.split(" ")[1:], " ")
+                amountOfCard = int(line.replace("\n", "").split(" ")[0])
+                if len(card.split(". ")) > 1:
+                    for i in range(0, amountOfCard):
+                        deck.append(card.split(". "))
+                else:
+                    for cardLine in open("Decks/Database", "r").readlines():
+                        if card.replace("\n", "") == Join(cardLine.split(". ")[0].split(" ")[1:], " ").replace("\n", ""):
+                            for i in range(0, amountOfCard):
+                                deck.append(cardLine.split(". "))
+                            break
+
+    except:
+        deckName = deckName.replace('\n', '')
+        with open(f"Decks/{deckName}/Decklist", "r") as f:
+            deckListFile = ""
+            driver = webdriver.Chrome(ChromeDriverManager().install())
+            deckList = []
+            for line in f.readlines():
+                if not line in deckList:
+                    deckList.append(line.replace("\n", ""))
+
+            for card in deckList:
+                isInDataBase = False
+                for cardLine in open("Decks/Database", "r").readlines():
+                    newline = "\n"
+                    if Join(card.replace(newline, '').split(' ')[1:], ' ') == Join(cardLine.split(". ")[0].split(" ")[1:], " ").replace("\n", ""):
+                        isInDataBase = True
+                        deckListFile = deckListFile + cardLine
+                        break
+                if not isInDataBase:
+                    numberOfThatCard = card.split(" ")[0]
+                    card = Join(card.split(" ")[1:], " ")
+                    try:
+                        driver.get(f'https://gatherer.wizards.com/Pages/Search/Default.aspx?name=+["{card}"]')
+                        string = ""
+                        string = string + card
+                        string = string + ". " + driver.find_element_by_id(
+                            "ctl00_ctl00_ctl00_MainContent_SubContent_SubContent_typeRow").text.replace("Types:", "")
+                        try:
+                            string = string + ". " + driver.find_element_by_id(
+                                "ctl00_ctl00_ctl00_MainContent_SubContent_SubContent_cmcRow").text.replace("Converted Mana Cost:", "")
+                        except:
+                            string = string + ". " + "0"
+                        string = string + ". " + driver.find_element_by_id(
+                            "ctl00_ctl00_ctl00_MainContent_SubContent_SubContent_textRow").text.replace("Card Text:", "")
+                        string = numberOfThatCard + " " + string
+                        deckListFile = deckListFile + string.replace("\n", "") + "\n"
+                    except:
+                        try:
+                            found = False
+                            while not found:
+                                try:
+                                    for cardName in driver.find_elements_by_class_name("cardTitle"):
+                                        if cardName.text == card:
+                                            cardName.click()
+                                    found = True
+                                except:
+                                    pass
+                            string = ""
+                            string = string + card
+                            string = string + ". " + driver.find_element_by_id(
+                                "ctl00_ctl00_ctl00_MainContent_SubContent_SubContent_typeRow").text.replace("Types:", "")
+                            try:
+                                string = string + ". " + driver.find_element_by_id(
+                                    "ctl00_ctl00_ctl00_MainContent_SubContent_SubContent_cmcRow").text.replace(
+                                    "Converted Mana Cost:", "")
+                            except:
+                                string = string + ". " + "0"
+                            try:
+                                string = string + ". " + driver.find_element_by_id(
+                                    "ctl00_ctl00_ctl00_MainContent_SubContent_SubContent_textRow").text.replace("Card Text:", "")
+                            except:
+                                string = string + ". " + " "
+                            string = numberOfThatCard + " " + string
+                            deckListFile = deckListFile + string.replace("\n", "") + "\n"
+                        except:
+                            pass
+        if not deckListFile == "":
+            with open(f"Decks/Database", "a") as f:
+                f.write("\n" + deckListFile)
+        with open(f"Decks/{deckname}/Decklist", "r") as f:
+            for line in f.readlines():
+                card = Join(line.split(" ")[1:], " ")
+                amountOfCard = int(line.replace("\n", "").split(" ")[0])
+                if len(card.split(". ")) > 1:
+                    for i in range(0, amountOfCard):
+                        deck.append(card.split(". "))
+                else:
+                    for cardLine in open("Decks/Database", "r").readlines():
+                        if card.replace("\n", "") == Join(cardLine.split(". ")[0].split(" ")[1:], " ").replace("\n", ""):
+                            for i in range(0, amountOfCard):
+                                deck.append(cardLine.split(". "))
+                            break
+        with open(f"Decks/{deckName}/Check", "w") as f:
+            f.write(" ")
+
+
+def IsManaRamp (card):
+    cardText = card[3]
+    manaramp = False
+    if "Add" in cardText:
+        manaramp = True
+    elif "search for" in cardText and "land" in cardText and "put" in cardText and "battlefield":
+        manaramp = True
+    return manaramp
+
+
+def IsCardDraw (card):
+    cardText = card[3]
+    carddraw = False
+    if "draw" in cardText.lower():
+        carddraw = True
+    elif "put into" in cardText.lower() and "hand" in cardText.lower():
+        carddraw = True
+    return carddraw
+
+
+def IsRemoval (card):
+    cardText = card[3].lower()
+    isremoval = False
+    if "destroy" in cardText and "target" in cardText:
+        isremoval = True
+    elif "exile" in cardText and "target" in cardText:
+        isremoval = True
+    elif "counter" in cardText.lower() and "target" in cardText.lower():
+        isremoval = True
+    return isremoval
+
+
+def IsBoardWipe (card):
+    cardText = card[3].lower()
+    isboardwipes = False
+    if "destroy" in cardText or "exile" in cardText or "return" in cardText:
+        if "all" in cardText or "each" in cardText:
+            isboardwipes = True
+    return isboardwipes
+
+
+def IsTutor (card):
+    cardText = card[3].lower()
+    istutor = False
+    if "search your library" in cardText.lower() and not "land" in cardText.lower():
+        istutor = True
+    return istutor
+
+decks = ["Muldrotha, the Gravetide"]
+for deckname in decks:
+    deck = []
+    landNum = 0
+    creatureNum = 0
+    sorceryNum = 0
+    artifactNum = 0
+    enchantmentNum = 0
+    instantNum = 0
+    planeswalkerNum = 0
+    lands = []
+    nonlands = []
+    creatures = []
+    sorceries = []
+    artifacts = []
+    enchantments = []
+    instants = []
+    planeswalkers = []
+    manaRocks = []
+    manaRamp = []
+    manaDorks = []
+    cardDraw = []
+    removal = []
+    boardwipes = []
+    manaCurve = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    basicLands = []
+    nonBasicLands = []
+    creatureTypes = []
+    tutors = []
+    tapLands = []
+    competitiveScore = 0
+    GetDeck(deckname)
+    #Organises cards in deck into different card types
+    for card in deck:
+        if "Land" in card[1]:
+            landNum = landNum + 1
+            lands.append(card)
+        else:
+            nonlands.append(card)
+            if "Creature" in card[1]:
+                creatureNum = creatureNum + 1
+                creatures.append(card)
+            if "Sorcery" in card[1]:
+                sorceryNum = sorceryNum + 1
+                sorceries.append(card)
+            if "Artifact" in card[1]:
+                artifactNum = artifactNum + 1
+                artifacts.append(card)
+            if "Enchantment" in card[1]:
+                enchantmentNum = enchantmentNum + 1
+                enchantments.append(card)
+            if "Planeswalker" in card[1]:
+                planeswalkerNum = planeswalkerNum + 1
+                planeswalkers.append(card)
+            if "Instant" in card[1]:
+                instantNum = instantNum + 1
+                instants.append(card)
+    for card in nonlands:
+        manaCurve[int(card[2])] = manaCurve[int(card[2])] + 1
+    a = 0
+    for i in range(0, len(manaCurve)):
+        a = a + 1
+        if a == 8:
+            break
+        index = len(manaCurve)
+        index = index - 1
+        if int(manaCurve[index]) == 0:
+            manaCurve.pop(index)
+        else:
+            break
+    for card in nonlands:
+        if IsManaRamp(card):
+            manaRamp.append(card)
+    for card in nonlands:
+        if IsCardDraw(card):
+            cardDraw.append(card)
+    for card in nonlands:
+        if IsRemoval(card):
+            removal.append(card)
+    for card in nonlands:
+        if IsBoardWipe(card):
+            boardwipes.append(card)
+    for card in nonlands:
+        if IsTutor(card):
+            tutors.append(card)
+    for card in creatures:
+        creatureType = str(card[1]).split(" — ")[1].split(" ")
+        for i in creatureType:
+            found = False
+            for type in range(0, len(creatureTypes)):
+                if i == creatureTypes[type][0]:
+                    creatureTypes[type][1] = creatureTypes[type][1] + 1
+                    found = True
+            if not found:
+                creatureTypes.append([i, 1])
+    for card in lands:
+        if "Basic" in card[1]:
+            basicLands.append(card)
+        else:
+            nonBasicLands.append(card)
+    for card in nonBasicLands:
+        if "enters the battlefield tapped" in card[3].lower() and not "unless" in card[3].lower():
+            tapLands.append(card)
+        elif "enters the battlefield tapped" in card[3].lower() and not "if you don't" in card[3].lower():
+            tapLands.append(card)
+    total = 0
+    for card in nonlands:
+        total = total + int(card[2])
+    avg = total/len(nonlands)
+    print(f"\nAverage Converted Mana Cost: {round(avg, 2)}")
+
+    x = []
+    for i in range(0, len(manaCurve)):
+        x.append(i)
+    fig1 = plt.figure(1, figsize=(20, 5))
+    curve = fig1.add_subplot(121)
+    curve.plot(x, manaCurve)
+    curve.yaxis.set_major_locator(MaxNLocator(integer=True))
+    plt.show()
+    x = ["Creatures", "Artifacts", "Enchantments", "Planeswalkers", "Instants", "Sorceries", "Lands"]
+    y = [len(creatures), len(artifacts), len(enchantments), len(planeswalkers), len(instants), len(sorceries), len(lands)]
+    plt.bar(x, y)
+    plt.show()
+    x = ["Basic", "Non-Basic"]
+    y = [len(basicLands), len(nonBasicLands)]
+    plt.bar(x, y)
+    plt.show()
+    x = []
+    y = []
+    for i in creatureTypes:
+        if not i[1] == 1:
+            x.append(i[0])
+            y.append(i[1])
+    plt.bar(x, y)
+    plt.show()
+    x = ["Ramp", "Card Draw", "Removal", "Boardwipes", "Tutors"]
+    y = [len(manaRamp), len(cardDraw), len(removal), len(boardwipes), len(tutors)]
+    plt.bar(x, y)
+    plt.show()
+
+    commanders = deckname.split(" + ")
+    for i in commanders:
+        if IsTutor(i):
+            for num in range(0, 5):
+                tutors.append(i)
+        if IsManaRamp(i):
+            for num in range(0, 5):
+                manaRamp.append(i)
+        if IsCardDraw(i):
+            for num in range(0, 5):
+                cardDraw.append(i)
+        if IsRemoval(i):
+            for num in range(0, 5):
+                removal.append(i)
+        if IsBoardWipe(i):
+            for num in range(0, 5):
+                boardwipes.append(i)
+    data = pd.read_csv(f"Data.csv", sep=";")
+    predict = "PowerLevel"
+    X = np.array(data.drop([predict], 1))
+    y = np.array(data[predict])
+    linear = linear_model.LinearRegression()
+    best = 0
+    a = [[avg, len(instants), len(lands), len(manaRamp), len(cardDraw), len(removal), len(boardwipes), len(tutors), len(tapLands)]]
+    try:
+        pickle_in = open("model.pickle", "rb")
+        linear = pickle.load(pickle_in)
+        mostAcurate = linear.predict(a)[0]
+    except:
+        for i in range(0, 100):
+            x_train, x_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y, test_size=0.1)
+            linear.fit(x_train, y_train)
+            acc = linear.score(x_test, y_test)
+            if acc > best:
+                best = acc
+                mostAcurateModel = linear_model.LinearRegression().fit(x_train, y_train)
+                mostAcurate = linear.predict(a)[0]
+                with open("model.pickle", "wb") as f:
+                    pickle.dump(mostAcurateModel, f)
+
+    print(f"Power Level: {round(int(mostAcurate))}")
+    with open("Decks/Decks", "r") as f:
+        if not deckname in f.read():
+            with open(f"Data.csv", "a") as q:
+                string = str(avg) + ";" + str(len(instants)) + ";" + str(len(lands)) + ";" + str(len(manaRamp)) + ";" + str(
+                    len(cardDraw)) + ";" + str(len(removal)) + ";" + str(len(boardwipes)) + ";" + str(
+                    len(tutors)) + ";" + str(len(tapLands))
+                q.write('\n' + string)
+            with open("Decks/Decks", "a") as g:
+                g.write(f'\n{deckname}')
