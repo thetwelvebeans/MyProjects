@@ -1,0 +1,1120 @@
+import random
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+import os
+from PIL import Image
+import math
+import time
+import PySimpleGUI as sg
+
+def save_image(chrome, element, save_path):
+    location = element.location_once_scrolled_into_view
+    size = element.size
+    chrome.save_screenshot(save_path)
+    image = Image.open(save_path)
+    left = location['x']
+    top = location['y']
+    right = location['x'] + size['width']
+    bottom = location['y'] + size['height']
+    image = image.crop((left, top, right, bottom))
+    image.save(save_path, 'png')
+    return image
+
+#Functions concentrate lists into strings
+def joinWithSpaces (list):
+    string = ""
+    for i in list:
+        string = string + i + " "
+    string = string[:-1]
+    return string
+
+
+def joinWithPlusses (list):
+    string = ""
+    for i in list:
+        string = string + i + " + "
+    string = string[:-3]
+    return string
+
+
+def join (list):
+    string = ""
+    for i in list:
+        string = string + i
+    return string
+
+
+def Remove(item, list):
+    for i in range(0, len(list)):
+        if list[i] == item:
+            list.pop(i)
+            break
+    return list
+#Create the database folder if it hasn't been created yet
+try:
+    os.mkdir(f"ImageDataBase")
+except:
+    pass
+#Fetch Images of basic lands
+try:
+    os.mkdir(f"Basic Lands")
+    codes = ["485277", "485279", "485276", "485280", "485278", "407696"]
+    basicLands = ["Island", "Mountain", "Plains", "Forest", "Swamp", "Wastes"]
+    driver = webdriver.Chrome(ChromeDriverManager().install())
+    for i in range(0, 6):
+        driver.get(f"https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid={codes[i]}")
+        image = save_image(driver, driver.find_element_by_id(f'ctl00_ctl00_ctl00_MainContent_SubContent_SubContent_cardImage'),
+                           f"Basic Lands/{basicLands[i]}.png")
+except:
+    pass
+
+
+basicLands = ["Island", "Mountain", "Plains", "Forest", "Swamp", "Wastes"]
+with open("Decks", "r") as f:
+    decks = []
+    for line in f.readlines():
+        decks.append(line.replace("\n", ""))
+#Create window to chose deck from
+layout = []
+if len(decks) > 10:
+    for i in range(1, 11):
+        listToAdd = []
+        num = math.ceil(len(decks) / 10)
+        for w in range(0, num):
+            try:
+                listToAdd.append(sg.Button(decks[i + (w * 10)]))
+            except:
+                pass
+        layout.append(listToAdd)
+
+else:
+    for i in decks:
+        layout.append([sg.Button(i)])
+
+layout.append([sg.Text("Other"), sg.Input(key='-INPUT-'), sg.Button("OK")])
+window = sg.Window("Choose your general", layout)
+chosen = False
+#Take in deck choice
+while not chosen:
+    event, values = window.read()
+    for i in decks:
+        if event == i:
+            chosenCommander = i
+            chosen = True
+            break
+
+    if event == sg.WIN_CLOSED:
+        break
+    if event == "OK":
+        chosenCommander = values['-INPUT-']
+        chosen = True
+        break
+window.close()
+#Get decklist for deck
+while True:
+    try:
+        deck = []
+        graveyard = []
+        commandZone = chosenCommander.split(" + ")
+        commanders = []
+        for i in commandZone:
+            commanders.append(i)
+        if len(commanders) > 1:
+            commander = joinWithPlusses(commanders)
+        else:
+            commander = commandZone[0]
+        openedImages = []
+        if commander in open("Decks", "r").read():
+            decklist = ""
+            for i in open(f"{commander}/Deck", "r").readlines():
+                decklist = decklist + i.split(" ")[0].replace("x", "") + " " + joinWithSpaces(i.split(" ")[1:])
+            open(f"{commander}/Deck", "w").write(decklist)
+
+            with open(f"{commander}/Deck", "r") as f:
+                deck = []
+                for line in f.readlines():
+                    for i in range(0, int(line.replace("\n", "").split(" ")[0])):
+                        deck.append(joinWithSpaces(line.split(" ")[1:]).replace("\n", ""))
+        else:
+            layout = [
+                [sg.Text("Input your deck list here: ")],
+                [sg.Input(key="-INPUT-", size=(100, 100))],
+                [sg.Button("Submit")]
+            ]
+            window = sg.Window("Input Deck", layout)
+            event, values = window.read()
+            if event == "Submit":
+                for line in str(values["-INPUT-"]).split("\n"):
+                    try:
+                        for i in range(0, int(line.replace("\n", "").split(" ")[0].replace("\n", ""))):
+                            deck.append(joinWithSpaces(line.split(" ")[1:]).replace("\n", ""))
+                    except:
+                        pass
+                try:
+                    os.mkdir(commander)
+                except:
+                    pass
+                open(f"{commander}/Deck", "a").write(values["-INPUT-"])
+                decklist = ""
+                for i in open(f"{commander}/Deck", "r").readlines():
+                    decklist = decklist + i.split(" ")[0].replace("x", "") + " " + joinWithSpaces(i.split(" ")[1:])
+                open(f"{commander}/Deck", "w").write(decklist)
+                window.close()
+
+
+
+        decklist = decklist.split("\n")
+
+        hand = []
+        onTheBattleField = []
+
+
+        def Show (hand1, battlefield, graveyard1, commandzone):
+            string = ""
+            for i in hand1:
+                string = string + i + ", "
+            string = string[:-1]
+            print("In hand:\n   ", string)
+            string = ""
+            for i in battlefield:
+                string = string + i + ", "
+            string = string[:-1]
+            print("On battlefield:\n   ", string)
+            string = ""
+            for i in graveyard1:
+                string = string + i + ", "
+            string = string[:-1]
+            print("In graveyard:\n   ", string)
+            string = ""
+            for i in commandZone:
+                string = string + i + ", "
+            string = string[:-1]
+            print("Command Zone:\n   ", string)
+        deckImages = []
+        deckCardNames = []
+        for i in deck:
+            if not i in deckCardNames:
+                deckCardNames.append(i)
+
+
+        if not commander in open("Decks", "r").read():
+            with open("Decks", "a") as f:
+                f.write(f"\n{commander}")
+        try:
+            os.mkdir(f"{commander}")
+        except:
+            pass
+        with open(f"{commander}/testFile.txt", "a") as f:
+            f.write("Success")
+
+        try:
+            for i in deckCardNames:
+                image_of_card = Image.open(f"ImageDataBase/{i}.png")
+        except:
+            #Get deck images
+            driver = webdriver.Chrome(ChromeDriverManager().install())
+            for i in deckCardNames:
+                try:
+                    if "//" in i:
+                        image_of_card = Image.open(f"ImageDataBase/{i.replace('//', '--')}.png")
+                    else:
+                        image_of_card = Image.open(f"ImageDataBase/{i}.png")
+                except:
+                    driver.get(f'https://gatherer.wizards.com/Pages/Search/Default.aspx?name=+["{i}"]')
+                    if "//" in i:
+                        new_card_name = i + " (" + i.split(" // ")[0] + ")"
+                        try:
+                            for cardName in driver.find_elements_by_class_name("cardTitle"):
+                                if cardName.text == new_card_name:
+                                    cardName.click()
+                        except:
+                            pass
+                    else:
+                        try:
+                            for cardName in driver.find_elements_by_class_name("cardTitle"):
+                                if cardName.text == i:
+                                    cardName.click()
+                        except:
+                            pass
+                    if " // " in i:
+                        try:
+                            try:
+                                try:
+                                    driver.find_element_by_css_selector(
+                                        f'[alt="Masterpiece Series: Kaladesh Inventions (Special)"]').click()
+                                except:
+                                    pass
+                                for variation in driver.find_elements_by_class_name("variationLink"):
+                                    if variation.text == "2":
+                                        variation.click()
+
+                                time.sleep(0.5)
+                                image = save_image(driver, driver.find_elements_by_css_selector(f'[alt="{i}"]')[0],
+                                                   f"ImageDataBase/{i.replace(' // ', ' -- ')}.png")
+                            except:
+                                image = save_image(driver, driver.find_elements_by_css_selector(f'[alt="{i}"]')[0],
+                                                   f"ImageDataBase/{i.replace(' // ', ' -- ')}.png")
+                        except:
+                            found = False
+                            while not found:
+                                try:
+                                    for cardName in driver.find_elements_by_class_name("cardTitle"):
+                                        if cardName.text == i:
+                                            cardName.click()
+                                    found = True
+                                except:
+                                    pass
+                            found = False
+                            while not found:
+                                try:
+                                    image = save_image(driver, driver.find_element_by_class_name("cardImage"),
+                                                       f"ImageDataBase/{i.replace(' // ', ' -- ')}.png")
+                                    found = True
+                                except:
+                                    pass
+                    else:
+                        try:
+                            try:
+                                try:
+                                    driver.find_element_by_css_selector(f'[alt="Masterpiece Series: Kaladesh Inventions (Special)"]').click()
+                                except:
+                                    pass
+                                for variation in driver.find_elements_by_class_name("variationLink"):
+                                    if variation.text == "2":
+                                        variation.click()
+
+                                time.sleep(0.5)
+                                image = save_image(driver, driver.find_elements_by_css_selector(f'[alt="{i}"]'),
+                                                   f"ImageDataBase/{i}.png")
+                            except:
+                                image = save_image(driver, driver.find_element_by_css_selector(f'[alt="{i}"]'),
+                                               f"ImageDataBase/{i}.png")
+                        except:
+                            found = False
+                            while not found:
+                                try:
+                                    for cardName in driver.find_elements_by_class_name("cardTitle"):
+                                        if cardName.text == i:
+                                            cardName.click()
+                                    found = True
+                                except:
+                                    pass
+                            found = False
+                            while not found:
+                                try:
+                                    image = save_image(driver, driver.find_element_by_class_name("cardImage"),
+                                                    f"ImageDataBase/{i}.png")
+                                    found = True
+                                except:
+                                    pass
+            driver.close()
+        for i in range(0, len(deck)):
+            if " // " in deck[i]:
+                deck[i] = deck[i].replace(" // ", " -- ")
+        try:
+            deck.remove(commander)
+        except:
+            for i in commanders:
+                deck.remove(i)
+        #Draw hand
+        random.shuffle(deck)
+        for i in range(0, 7):
+            card = deck[0]
+            hand.append(card)
+            deck.pop(0)
+        done = False
+        #Get image for commander
+        while not done:
+            try:
+                cardImage = Image.open(f"ImageDataBase/{commander}.png")
+                done = True
+            except:
+                try:
+                    for i in commanders:
+                        cardImage = Image.open(f"ImageDataBase/{i}.png")
+                    done = True
+                except FileNotFoundError:
+                    driver = webdriver.Chrome(ChromeDriverManager().install())
+
+                    driver.get(f'https://gatherer.wizards.com/Pages/Search/Default.aspx?name=+["{commander}"]')
+                    try:
+                        try:
+                            for variation in driver.find_elements_by_class_name("variationLink"):
+                                if variation.text == "2":
+                                    variation.click()
+                            time.sleep(0.5)
+                            image = save_image(driver, driver.find_elements_by_css_selector(f'[alt="{commander}"]'),
+                                               f"ImageDataBase/{commander}.png")
+                        except:
+                            image = save_image(driver, driver.find_element_by_css_selector(f'[alt="{commander}"]'),
+                                               f"ImageDataBase/{commander}.png")
+                    except:
+                        found = False
+                        while not found:
+                            try:
+                                for cardName in driver.find_elements_by_class_name("cardTitle"):
+                                    if cardName.text == commander:
+                                        cardName.click()
+                                found = True
+                            except:
+                                pass
+                        found = False
+                        while not found:
+                            try:
+                                image = save_image(driver, driver.find_element_by_class_name("cardImage"),
+                                                   f"ImageDataBase/{commander}.png")
+                                found = True
+                            except:
+                                pass
+                    driver.close()
+
+        string = ""
+        for i in hand:
+            string = string + i + ", "
+        string = string[:-1]
+        done = False
+        numberOfMuligans = 0
+        selected_card = ""
+        request = ""
+        #Check is user wants to muligan
+        while not done:
+            try:
+                sg.theme("DarkTeal9")
+                layout = []
+                handColumn = []
+                imageColumn = []
+
+                for i in hand:
+                    handColumn.append([sg.Button(i)])
+                if request == "":
+                    handColumn.append([sg.Button("Keep?"), sg.Button("Muligan?")])
+                else:
+                    handColumn.append([sg.Text(request), sg.Button("Done.")])
+                if selected_card == "":
+                    imageColumn.append([sg.Text("Select a card.")])
+                else:
+                    imageColumn.append([sg.Image(f"ImageDataBase/{selected_card}.png")])
+                    imageColumn.append([sg.Button(f"Bottom {selected_card}")])
+                layout = [[sg.Column(handColumn), sg.VSeparator(), sg.Column(imageColumn)]]
+                window = sg.Window("Muligan", layout)
+                event, values = window.read()
+                muligan = str(event)
+                if event == sg.WIN_CLOSED:
+                    window.close()
+                if muligan.lower() == "keep?":
+                    if numberOfMuligans > 0:
+                        request = f"Choose {numberOfMuligans} to bottom: "
+                    else:
+                        done = True
+                elif "muligan" in muligan.lower():
+                    for i in hand:
+                        deck.append(i)
+                    random.shuffle(deck)
+                    hand = []
+                    for i in range(0, 7):
+                        card = deck[0]
+                        hand.append(card)
+                        deck.pop(0)
+
+                    try:
+                        cardImage = Image.open(f"ImageDataBase/{commander}.png")
+                    except:
+                        for i in commanders:
+                            cardImage = Image.open(f"ImageDataBase/{i}.png")
+                    string = ""
+                    for i in hand:
+                        string = string + i + ", "
+                    string = string[:-1]
+                    numberOfMuligans += 1
+                elif muligan.lower() == "done.":
+                    done = True
+
+                for i in hand:
+                    if f"Bottom {i}" in muligan:
+                        hand.pop(hand.index(i))
+                        deck.append(i)
+                        break
+                    elif i in muligan:
+                        selected_card = i
+                window.close()
+            except:
+                pass
+        window.close()
+        chosen = False
+        selected_card = ""
+        play_with_top_revealed = False
+        #Loop for gameplay
+        g = False
+        while not g:
+            while not chosen:
+                try:
+                    cmd = ""
+                    layout = []
+                    sg.theme("DarkTeal9")
+                    commandersButtons = []
+                    #Set up layout for UI
+                    for i in commandZone:
+                        commandersButtons.append(sg.Button(i, key=f"{i}inCommandZone"))
+                    cardSelectorColumn = [
+                        commandersButtons
+                    ]
+                    if len(hand) > 10:
+                        for i in range(0, 11):
+                            listToAdd = []
+                            num = math.ceil(len(hand) / 10)
+                            for w in range(0, num):
+                                try:
+                                    listToAdd.append(sg.Button(hand[i + (w * 11)], key=f"{hand[i + (w * 11)]}inHand"))
+                                except:
+                                    pass
+                            cardSelectorColumn.append(listToAdd)
+                    else:
+                        for i in hand:
+                            cardSelectorColumn.append([sg.Button(i, key=f"{i}inHand")])
+
+                    cardSelectorColumn.append(
+                        [sg.Text("  "), sg.Text("  "), sg.Text("  "), sg.Text("  "), sg.Text("  "), sg.Text("  "),
+                         sg.Text("  "), sg.Text("  "), sg.Text("  "), sg.Text("  "), sg.Text("  "), sg.Text("  "),
+                         sg.Text("  "), sg.Button("Draw")])
+                    onBattlefieldRow = []
+                    cardSelectorColumn.append([sg.Text("Battlefield")])
+                    if len(onTheBattleField) > 10:
+                        num = math.ceil(len(onTheBattleField) / 10)
+                        index = 0
+                        for i in range(0, num):
+                            listToAdd = []
+                            for w in range(1, 11):
+                                try:
+                                    listToAdd.append(sg.Button(onTheBattleField[index],
+                                                             key=f"{onTheBattleField[index]}onBattlefield"))
+                                    index = index + 1
+                                except:
+                                    pass
+                            cardSelectorColumn.append(listToAdd)
+                    else:
+                        for i in onTheBattleField:
+                            onBattlefieldRow.append(sg.Button(i, key=f"{i}onBattlefield"))
+                        cardSelectorColumn.append(onBattlefieldRow)
+                    cardSelectorColumn.append([sg.Text("Graveyard")])
+                    inGraveyard = []
+                    if len(graveyard) > 10:
+                        num = math.ceil(len(graveyard) / 10)
+                        index = 0
+                        for i in range(0, num):
+                            listToAdd = []
+                            for w in range(1, 11):
+                                try:
+                                    listToAdd.append(
+                                        sg.Button(graveyard[index], key=f"{graveyard[index]}inGraveyard"))
+                                    index = index + 1
+                                except:
+                                    pass
+                            cardSelectorColumn.append(listToAdd)
+                    else:
+                        for i in graveyard:
+                            inGraveyard.append(sg.Button(i, key=f"{i}inGraveyard"))
+                        cardSelectorColumn.append(inGraveyard)
+                    real_card = selected_card.replace("inHand", "")\
+                        .replace("inGraveyard", "").replace("onBattlefield", "").replace("inCommandZone", "")
+                    multipleVarients = False
+                    for i in range(0, 40):
+                        if str(i) in selected_card:
+                            real_card = real_card.replace(str(i), "")
+                            multipleVarients = True
+                    if "from top of library play " in selected_card.lower():
+                        selected_card = selected_card.replace("from top of library play ", "")
+
+                    if not multipleVarients:
+
+                            if "inGraveyard" in selected_card:
+                                if real_card in basicLands:
+                                    cardImageColumn = [
+                                        [sg.Image(f"Basic Lands/{selected_card.replace('inGraveyard', '')}.png")],
+                                        [sg.Button(f"Return {selected_card.replace('inGraveyard', '')}",
+                                                   key=f"return {selected_card.replace('inGraveyard', '')}"),
+                                         sg.Button(f"Exile {selected_card.replace('inGraveyard', '')}",
+                                                   key=f"exile {selected_card.replace('inGraveyard', '')}")]
+                                    ]
+                                else:
+                                    cardImageColumn = [
+                                        [sg.Image(f"ImageDataBase/{selected_card.replace('inGraveyard', '')}.png")],
+                                        [sg.Button(f"Return {selected_card.replace('inGraveyard', '')}",
+                                                   key=f"return {selected_card.replace('inGraveyard', '')}"),
+                                         sg.Button(f"Exile {selected_card.replace('inGraveyard', '')}",
+                                                   key=f"exile {selected_card.replace('inGraveyard', '')}")]
+                                    ]
+                            elif "inHand" in selected_card:
+
+                                if real_card in basicLands:
+                                    cardImageColumn = [
+                                        [sg.Image(f"Basic Lands/{selected_card.replace('inHand', '')}.png")],
+                                        [sg.Button(f"Play {selected_card.replace('inHand', '')}",
+                                                   key=f"play {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('inHand', '')}",
+                                                   key=f"graveyard {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Bottom {selected_card.replace('inHand', '')}",
+                                                   key=f"bottom {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Top {selected_card.replace('inHand', '')}",
+                                                   key=f"top {selected_card.replace('inHand', '')}")
+                                         ]
+                                    ]
+                                else:
+                                    cardImageColumn = [
+                                        [sg.Image(f"ImageDataBase/{selected_card.replace('inHand', '')}.png")],
+                                        [sg.Button(f"Play {selected_card.replace('inHand', '')}",
+                                                   key=f"play {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('inHand', '')}",
+                                                   key=f"graveyard {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Bottom {selected_card.replace('inHand', '')}",
+                                                   key=f"bottom {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Top {selected_card.replace('inHand', '')}",
+                                                   key=f"top {selected_card.replace('inHand', '')}")
+                                         ]
+                                    ]
+                            elif "onBattlefield" in selected_card:
+                                if real_card in basicLands:
+                                    cardImageColumn = [
+                                        [sg.Image(f"Basic Lands/{selected_card.replace('onBattlefield', '')}.png")],
+                                        [sg.Button(f"Bounce {selected_card.replace('onBattlefield', '')}",
+                                                   key=f"bounce {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('onBattlefield', '')}",
+                                                   key=f"graveyard {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Exile {selected_card.replace('onBattlefield', '')}",
+                                                   key=f"exile {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Put {selected_card.replace('onBattlefield', '')} into the Command Zone",
+                                                   key=f"commandzone {selected_card.replace('onBattlefield', '')}")]
+                                ]
+                                else:
+                                    cardImageColumn = [
+                                        [sg.Image(f"ImageDataBase/{selected_card.replace('onBattlefield', '')}.png")],
+                                        [sg.Button(f"Bounce {selected_card.replace('onBattlefield', '')}", key=f"bounce {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('onBattlefield', '')}", key=f"graveyard {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Exile {selected_card.replace('onBattlefield', '')}", key=f"exile {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Put {selected_card.replace('onBattlefield', '')} into the Command Zone", key=f"commandzone {selected_card.replace('onBattlefield', '')}")]
+                                    ]
+                            elif "inCommandZone" in selected_card:
+                                if real_card in basicLands:
+                                    cardImageColumn = [
+                                        [sg.Image(f"Basic Lands/{selected_card.replace('inCommandZone', '')}.png")],
+                                        [sg.Button(f"Play {selected_card.replace('inCommandZone', '')}",
+                                                   key=f"play {selected_card.replace('inCommandZone', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('inCommandZone', '')}",
+                                                   key=f"graveyard {selected_card.replace('inCommandZone', '')}"),
+                                         sg.Button(f"Put {selected_card.replace('inCommandZone', '')} into your hand",
+                                                   key=f"hand {selected_card.replace('inCommandZone', '')}")]
+                                    ]
+                                else:
+                                    cardImageColumn = [
+                                        [sg.Image(f"ImageDataBase/{selected_card.replace('inCommandZone', '')}.png")],
+                                        [sg.Button(f"Play {selected_card.replace('inCommandZone', '')}", key=f"play {selected_card.replace('inCommandZone', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('inCommandZone', '')}", key=f"graveyard {selected_card.replace('inCommandZone', '')}"),
+                                         sg.Button(f"Put {selected_card.replace('inCommandZone', '')} into your hand", key=f"hand {selected_card.replace('inCommandZone', '')}")]
+                                    ]
+                            else:
+                                cardImageColumn = [
+                                    [sg.Text("Select a card: ")]
+                                ]
+                    else:
+                            if "inGraveyard" in selected_card:
+                                selected_card = real_card + "inGraveyard"
+                            if "inHand" in selected_card:
+                                selected_card = real_card + "inHand"
+                            if "onBattlefield" in selected_card:
+                                selected_card = real_card + "onBattlefield"
+                            if "inCommandZone" in selected_card:
+                                selected_card = real_card + "inCommandZone"
+                            if "inGraveyard" in selected_card:
+                                if real_card in basicLands:
+                                    cardImageColumn = [
+                                        [sg.Image(f"Basic Lands/{selected_card.replace('inGraveyard', '')}.png")],
+                                        [sg.Button(f"Return {selected_card.replace('inGraveyard', '')}",
+                                                   key=f"return {selected_card.replace('inGraveyard', '')}"),
+                                         sg.Button(f"Exile {selected_card.replace('inGraveyard', '')}",
+                                                   key=f"exile {selected_card.replace('inGraveyard', '')}")]
+                                    ]
+                                else:
+                                    cardImageColumn = [
+                                        [sg.Image(f"ImageDataBase/{selected_card.replace('inGraveyard', '')}.png")],
+                                        [sg.Button(f"Return {selected_card.replace('inGraveyard', '')}",
+                                                   key=f"return {selected_card.replace('inGraveyard', '')}"),
+                                         sg.Button(f"Exile {selected_card.replace('inGraveyard', '')}",
+                                                   key=f"exile {selected_card.replace('inGraveyard', '')}")]
+                                    ]
+                            elif "inHand" in selected_card:
+
+                                if real_card in basicLands:
+                                    cardImageColumn = [
+                                        [sg.Image(f"Basic Lands/{selected_card.replace('inHand', '')}.png")],
+                                        [sg.Button(f"Play {selected_card.replace('inHand', '')}",
+                                                   key=f"play {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('inHand', '')}",
+                                                   key=f"graveyard {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Bottom {selected_card.replace('inHand', '')}",
+                                                   key=f"bottom {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Top {selected_card.replace('inHand', '')}",
+                                                   key=f"top {selected_card.replace('inHand', '')}")
+                                         ]
+                                    ]
+                                else:
+                                    cardImageColumn = [
+                                        [sg.Image(f"ImageDataBase/{selected_card.replace('inHand', '')}.png")],
+                                        [sg.Button(f"Play {selected_card.replace('inHand', '')}",
+                                                   key=f"play {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('inHand', '')}",
+                                                   key=f"graveyard {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Bottom {selected_card.replace('inHand', '')}",
+                                                   key=f"bottom {selected_card.replace('inHand', '')}"),
+                                         sg.Button(f"Top {selected_card.replace('inHand', '')}",
+                                                   key=f"top {selected_card.replace('inHand', '')}")
+                                         ]
+                                    ]
+                            elif "onBattlefield" in selected_card:
+                                if real_card in basicLands:
+                                    cardImageColumn = [
+                                        [sg.Image(f"Basic Lands/{selected_card.replace('onBattlefield', '')}.png")],
+                                        [sg.Button(f"Bounce {selected_card.replace('onBattlefield', '')}",
+                                                   key=f"bounce {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('onBattlefield', '')}",
+                                                   key=f"graveyard {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Exile {selected_card.replace('onBattlefield', '')}",
+                                                   key=f"exile {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Put {selected_card.replace('onBattlefield', '')} into the Command Zone",
+                                                   key=f"commandzone {selected_card.replace('onBattlefield', '')}")]
+                                    ]
+                                else:
+                                    cardImageColumn = [
+                                        [sg.Image(f"ImageDataBase/{selected_card.replace('onBattlefield', '')}.png")],
+                                        [sg.Button(f"Bounce {selected_card.replace('onBattlefield', '')}",
+                                                   key=f"bounce {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('onBattlefield', '')}",
+                                                   key=f"graveyard {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Exile {selected_card.replace('onBattlefield', '')}",
+                                                   key=f"exile {selected_card.replace('onBattlefield', '')}"),
+                                         sg.Button(f"Put {selected_card.replace('onBattlefield', '')} into the Command Zone",
+                                                   key=f"commandzone {selected_card.replace('onBattlefield', '')}")]
+                                    ]
+                            elif "inCommandZone" in selected_card:
+                                if real_card in basicLands:
+                                    cardImageColumn = [
+                                        [sg.Image(f"Basic Lands/{selected_card.replace('inCommandZone', '')}.png")],
+                                        [sg.Button(f"Play {selected_card.replace('inCommandZone', '')}",
+                                                   key=f"play {selected_card.replace('inCommandZone', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('inCommandZone', '')}",
+                                                   key=f"graveyard {selected_card.replace('inCommandZone', '')}"),
+                                         sg.Button(f"Put {selected_card.replace('inCommandZone', '')} into your hand",
+                                                   key=f"hand {selected_card.replace('inCommandZone', '')}")]
+                                    ]
+                                else:
+                                    cardImageColumn = [
+                                        [sg.Image(f"ImageDataBase/{selected_card.replace('inCommandZone', '')}.png")],
+                                        [sg.Button(f"Play {selected_card.replace('inCommandZone', '')}",
+                                                   key=f"play {selected_card.replace('inCommandZone', '')}"),
+                                         sg.Button(f"Graveyard {selected_card.replace('inCommandZone', '')}",
+                                                   key=f"graveyard {selected_card.replace('inCommandZone', '')}"),
+                                         sg.Button(f"Put {selected_card.replace('inCommandZone', '')} into your hand",
+                                                   key=f"hand {selected_card.replace('inCommandZone', '')}")]
+                                    ]
+                            else:
+                                cardImageColumn = [
+                                    [sg.Text("Select a card: ")]
+                                ]
+
+                    if not play_with_top_revealed:
+                        extraOptionsColumn = [
+                            [sg.Button("Scry ", key="scry "), sg.Input(size=(20, 80), key="-SCRY-")],
+                            [sg.Button("Look at top ", key="look at top "), sg.Input(size=(20, 80), key="-LOOK-")],
+                            [sg.Button("Mill ", key="mill "), sg.Input(size=(20, 80), key="-MILL-", )],
+                            [sg.Button("Draw ", key="draw "), sg.Input(size=(20, 80), key="-DRAW-")],
+                            [sg.Button("Tutor", key="tutor")],
+                            [sg.Button("Mill One", key="mill 1")],
+                            [sg.Button("Discard Hand", key="discard hand")],
+                            [sg.Button("Shuffle Graveyard into Library", key="shuffle graveyard into library")],
+                            [sg.Button("Shuffle", key="shuffle")],
+                            [sg.Button("Play with top revealed", key="reveal top")],
+                            [sg.Text(f"You have {len(deck)} cards left in your library.")]
+                        ]
+                    else:
+                        extraOptionsColumn = [
+                            [sg.Button("Scry ", key="scry "), sg.Input(size=(20, 80), key="-SCRY-")],
+                            [sg.Button("Look at top ", key="look at top "), sg.Input(size=(20, 80), key="-LOOK-")],
+                            [sg.Button("Mill ", key="mill "), sg.Input(size=(20, 80), key="-MILL-", )],
+                            [sg.Button("Draw ", key="draw "), sg.Input(size=(20, 80), key="-DRAW-")],
+                            [sg.Button("Tutor", key="tutor")],
+                            [sg.Button("Mill One", key="mill 1")],
+                            [sg.Button("Discard Hand", key="discard hand")],
+                            [sg.Button("Shuffle Graveyard into Library", key="shuffle graveyard into library")],
+                            [sg.Button("Shuffle", key="shuffle")],
+                            [sg.Button("Cover up top", key="reveal top")],
+                            [sg.Text(f"You have {len(deck)} cards left in your library.")]
+                        ]
+
+                    layout = [
+                        [
+                            sg.Column(cardSelectorColumn),
+                            sg.VSeparator(),
+                            sg.Column(cardImageColumn),
+                            sg.VSeparator(),
+                            sg.Column(extraOptionsColumn)
+                        ]
+                    ]
+                    if play_with_top_revealed:
+                        layout[0].append(
+                            sg.VSeparator()
+                        )
+                        layout[0].append(
+                            sg.Column(
+                                [
+                                    [sg.Image(f"ImageDataBase/{deck[0]}.png")],
+                                    [sg.Button(f"Play {deck[0]}",
+                                               key=f"from top of library play {deck[0]}"),
+                                     sg.Button(f"Graveyard {deck[0]}",
+                                               key=f"from top of library graveyard {deck[0]}"),
+                                     sg.Button(f"Put {deck[0]} into your hand",
+                                               key=f"draw 1")]
+                                ]
+                            )
+                        )
+                    window = sg.Window("Commander Simulator", layout, resizable=True).Finalize()
+                    event, values = window.read()
+                    #Get user input
+                    if event == sg.WIN_CLOSED:
+                        window.close()
+                        g = True
+                        break
+                    if "onBattlefield" in event or "inGraveyard" in event or "inHand" in event or "inCommandZone" in event:
+                        selected_card = event
+                    else:
+                        #Perform functions based on input
+                        if event == "OK":
+                            cmd = values["-INPUT-"]
+                        else:
+                            cmd = str(event)
+                        if cmd == "reveal top":
+                            if play_with_top_revealed:
+                                play_with_top_revealed = False
+                            else:
+                                play_with_top_revealed = True
+                        if cmd.title() == "Draw":
+                            card = deck[0]
+                            hand.append(card)
+                            deck.pop(0)
+                            selected_card = card + "inHand"
+                        elif "draw" in cmd.lower():
+                            cmd = cmd + values["-DRAW-"]
+                            cardsToDraw = int(cmd.split(" ")[cmd.split(" ").index("draw") + 1])
+
+                            for i in range(0, cardsToDraw):
+                                card = deck[0]
+                                hand.append(card)
+                                deck.pop(0)
+                        if "play" in cmd.lower():
+                            cardToPlay = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("play") + 1:])
+                            if cardToPlay in hand:
+                                try:
+                                    hand.remove(cardToPlay)
+                                    onTheBattleField.append(cardToPlay)
+                                except:
+                                    try:
+                                        hand.remove(cardToPlay.title())
+                                        onTheBattleField.append(cardToPlay)
+                                    except:
+                                        pass
+                            elif "from top of library" in event:
+                                deck.pop(0)
+                                onTheBattleField.append(cardToPlay)
+
+
+                            elif cardToPlay in commandZone:
+                                try:
+                                    commandZone.remove(cardToPlay)
+                                    onTheBattleField.append(cardToPlay)
+                                except:
+                                    try:
+                                        commandZone = ""
+                                        onTheBattleField.append(cardToPlay)
+                                    except:
+                                        pass
+                            else:
+                                pass
+                        if "tutor" in cmd.lower():
+                            window.close()
+                            layout = []
+                            if len(deck) > 10:
+                                for i in range(0, 11):
+                                    listToAdd = []
+                                    num = math.ceil(len(deck) / 10)
+                                    for w in range(0, num):
+                                        try:
+                                            listToAdd.append(
+                                                sg.Button(deck[i + (w * 11)], key=f"{deck[i + (w * 11)]}"))
+                                        except:
+                                            pass
+                                    layout.append(listToAdd)
+                            else:
+                                for i in deck:
+                                    layout.append([sg.Button(i, key=f"{i}")])
+                            window = sg.Window("Tutor", layout, resizable=True).Finalize()
+                            event, values = window.read()
+
+                            try:
+                                cardToSearch = event
+                                for i in range(0, 40):
+                                    if str(i) in cardToSearch:
+                                        cardToSearch = cardToSearch.replace(str(i), "")
+                                Remove(cardToSearch, deck)
+                                hand.append(cardToSearch)
+                                random.shuffle(deck)
+                            except:
+                                pass
+                        if "graveyard" in cmd.lower() and not cmd == "shuffle graveyard into library":
+                            cardToPlay = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("graveyard") + 1:])
+                            try:
+                                if cardToPlay in hand:
+                                    hand.remove(cardToPlay)
+                                elif "from top of library" in event:
+                                    deck.pop(0)
+                                elif cardToPlay in onTheBattleField:
+                                    onTheBattleField.pop(onTheBattleField.index(cardToPlay))
+
+                                graveyard.append(cardToPlay)
+                            except:
+                                try:
+                                    hand.remove(cardToPlay.title())
+                                    onTheBattleField.append(cardToPlay)
+                                except:
+                                    pass
+                        if "scry" in cmd.lower():
+                            window.close()
+                            cmd = cmd + values["-SCRY-"]
+                            X = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("scry") + 1])
+                            cardsToScry = []
+                            try:
+                                for i in range(0, int(X)):
+                                    cardsToScry.append(deck[i])
+                            except:
+                                X = join(X)
+                                for i in range(0, int(X)):
+                                    cardsToScry.append(deck[i])
+                            done = False
+                            selected_card_scry = ""
+                            while not done:
+
+                                leaveOrBottom = ""
+                                cardSelectorColumn = []
+                                cardImageColumn = []
+                                cardSelectorColumn.append([sg.Text(f"The top {X} cards of your library")])
+                                for i in cardsToScry:
+                                    cardSelectorColumn.append([sg.Button(i)])
+                                cardSelectorColumn.append([sg.Text("Order: "), sg.Input(key="-INPUT-"), sg.Button("OK")])
+                                cardSelectorColumn.append([sg.Button("Done")])
+                                if not selected_card_scry == "":
+                                    if selected_card_scry in basicLands:
+                                        cardImageColumn.append([sg.Image(f"Basic Lands/{selected_card_scry}.png")])
+                                    else:
+                                        cardImageColumn.append([sg.Image(f"ImageDataBase/{selected_card_scry}.png")])
+                                    cardImageColumn.append([sg.Button(f"Bottom {selected_card_scry}")])
+                                else:
+                                    cardImageColumn.append([sg.Text("Select a card.")])
+                                layout = [[sg.Column(cardSelectorColumn), sg.VSeparator(), sg.Column(cardImageColumn)]]
+                                window = sg.Window("Scry", layout)
+                                event, values = window.read()
+                                for i in cardsToScry:
+                                    if event == i:
+                                        selected_card_scry = event
+                                if event == "OK":
+                                    leaveOrBottom = f"order {values('-INPUT-')}"
+                                elif "Bottom" in event:
+                                    leaveOrBottom = "bottom " + str(event).replace("Bottom", "")
+                                else:
+                                    leaveOrBottom = event
+                                try:
+                                    if "bottom" in leaveOrBottom:
+                                        cardToBottom = joinWithSpaces(leaveOrBottom.split(" ")[leaveOrBottom.split(" ").index("bottom") + 1:])
+                                        cardToBottom = cardToBottom[1:]
+                                        deck.pop(deck.index(cardToBottom))
+                                        deck.append(cardToBottom)
+                                        cardsToScry.pop(cardsToScry.index(cardToBottom))
+                                    if "order" in leaveOrBottom:
+                                        cardsToOrder = joinWithSpaces(leaveOrBottom.split(" ")[leaveOrBottom.split(" ").index("order") + 1:])
+                                        orderedCards = []
+                                        for i in cardsToOrder.split(", "):
+                                            orderedCards.append(deck[0])
+                                            deck.pop(0)
+                                        for i in orderedCards:
+                                            orderedCards.pop(orderedCards.index(i))
+                                            orderedCards.insert(cardsToOrder.split(", ").index(i), 0)
+                                    if "done" in leaveOrBottom.lower():
+                                        done = True
+                                except:
+                                    pass
+                                window.close()
+                        if "bounce" in cmd.lower():
+                            cardToBounce = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("bounce") + 1:])
+                            try:
+                                onTheBattleField.pop(onTheBattleField.index(cardToBounce))
+                                hand.append(cardToBounce)
+                            except:
+                                try:
+                                    hand.remove(cardToPlay.title())
+                                    onTheBattleField.append(cardToPlay)
+                                except:
+                                    pass
+                        if "look at top" in cmd.lower():
+                            window.close()
+                            cmd = cmd + values["-LOOK-"]
+                            X = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("top") + 1])
+                            cardsToLookAt = []
+                            try:
+                                for i in range(0, int(X)):
+                                    cardsToLookAt.append(deck[0])
+                                    deck.pop(0)
+                            except:
+                                X = join(X).replace(" ", "")
+                                for i in range(0, int(X)):
+                                    cardsToLookAt.append(deck[0])
+                                    deck.pop(0)
+                            done = False
+                            selected_card_scry = ""
+                            while not done:
+
+                                request = ""
+                                cardSelectorColumn = []
+                                cardImageColumn = []
+                                cardSelectorColumn.append([sg.Text(f"The top {X} cards of your library")])
+                                for i in cardsToLookAt:
+                                    cardSelectorColumn.append([sg.Button(i)])
+                                cardSelectorColumn.append([sg.Text("--------")])
+                                cardSelectorColumn.append([sg.Button("Bottom rest"), sg.Button("Graveyard rest")])
+                                cardSelectorColumn.append([sg.Text("Order: "), sg.Input(key="-INPUT-"), sg.Button("OK")])
+                                cardSelectorColumn.append([sg.Button("Done")])
+                                if not selected_card_scry == "":
+                                    if selected_card_scry in basicLands:
+                                        cardImageColumn.append([sg.Image(f"Basic Lands/{selected_card_scry}.png")])
+                                    else:
+                                        cardImageColumn.append([sg.Image(f"ImageDataBase/{selected_card_scry}.png")])
+                                    cardImageColumn.append([sg.Button(f"Hand {selected_card_scry}")])
+                                    cardImageColumn.append([sg.Button(f"Play {selected_card_scry}")])
+                                else:
+                                    cardImageColumn.append([sg.Text("Select a card.")])
+                                layout = [[sg.Column(cardSelectorColumn), sg.VSeparator(), sg.Column(cardImageColumn)]]
+                                window = sg.Window("Look at top.", layout)
+                                event, values = window.read()
+                                for i in cardsToLookAt:
+                                    if i == event:
+                                        selected_card_scry = event
+                                if event == "OK":
+                                    request = f"{values['-INPUT-']}"
+                                elif "Hand" in event:
+                                    request = "hand" + str(event).replace("Hand", "")
+                                elif "Play" in event:
+                                    request = "play" + str(event).replace("Play", "")
+                                else:
+                                    request = event
+                                try:
+                                    if "hand" in request.lower():
+                                        cardToPutInHand = joinWithSpaces(
+                                            request.split(" ")[request.split(" ").index("hand") + 1:])
+                                        cardsToLookAt.pop(cardsToLookAt.index(cardToPutInHand))
+                                        hand.append(cardToPutInHand)
+                                    if "play" in request.lower():
+                                        cardToPlayFromTop = joinWithSpaces(
+                                            request.split(" ")[request.split(" ").index("play") + 1:])
+                                        cardsToLookAt.pop(cardsToLookAt.index(cardToPlayFromTop))
+                                        onTheBattleField.append(cardToPlayFromTop)
+                                    if request.lower() == "bottom rest":
+                                        for i in range(0, int(X)):
+                                            deck.append(cardsToLookAt[0])
+                                            cardsToLookAt.pop(0)
+                                        cardsToLookAt = []
+                                    if request.lower() == "graveyard rest":
+                                        for i in cardsToLookAt:
+                                            graveyard.append(i)
+                                        cardsToLookAt = []
+                                    if request.lower() == "done":
+                                        for i in cardsToLookAt:
+                                            cardsToLookAt.pop(cardsToLookAt.index(i))
+                                            cardsToLookAt.insert(0, i)
+                                        for i in range(0, len(cardsToLookAt)):
+                                            deck.insert(0, cardsToLookAt[i])
+                                        done = True
+                                except:
+                                    pass
+                                window.close()
+
+                        if "return" in cmd.lower():
+                            try:
+                                cardToReturn = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("return") + 1:])
+                                Remove(cardToReturn, graveyard)
+                                hand.append(cardToReturn)
+                            except:
+                                pass
+                        if "mill " in cmd.lower():
+                            cmd = cmd + values["-MILL-"]
+                            X = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("mill") + 1])
+                            try:
+                                for i in range(0, int(X)):
+                                    graveyard.append(deck[0])
+                                    deck.pop(0)
+                            except:
+                                X = join(X).replace(" ", "")
+                                for i in range(0, int(X)):
+                                    graveyard.append(deck[0])
+                                    deck.pop(0)
+                            for i in graveyard:
+                                string = string + i + ", "
+                            string = string[:-1]
+                        if "bottom" in cmd:
+
+                            cardToBottom = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("bottom") + 1:])
+                            if not cardToBottom == "all":
+                                Remove(cardToBottom, hand)
+                                deck.append(cardToBottom)
+                            else:
+                                for i in hand:
+                                    Remove(i, hand)
+                                    deck.append(i)
+                        if "exile" in cmd:
+                            cardToExile = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("exile") + 1:])
+                            if not cardToExile == "all":
+                                Remove(cardToExile, graveyard)
+                            else:
+                                for i in graveyard:
+                                    Remove(i, graveyard)
+                                    deck.append(i)
+                        if "top" in cmd and not "look" in cmd and not "reveal" in cmd and not "of library" in cmd:
+                            cardToTop = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("top") + 1:])
+                            if not cardToTop == "all":
+                                Remove(cardToTop, hand)
+                                deck.insert(0, cardToTop)
+                            else:
+                                for i in hand:
+                                    Remove(i, hand)
+                                    deck.append(0, i)
+                        if "commandzone" in cmd:
+                            cardToCommandZone = joinWithSpaces(cmd.split(" ")[cmd.split(" ").index("commandzone") + 1:])
+                            Remove(cardToCommandZone, onTheBattleField)
+                            commandZone.append(cardToCommandZone)
+                        if cmd == "discard hand":
+                            for i in hand:
+                                graveyard.append(i)
+                            hand = []
+                        if cmd == "shuffle":
+                            random.shuffle(deck)
+                        if cmd == "shuffle graveyard into library":
+                            for i in range(0, len(graveyard)):
+                                deck.append(graveyard[i])
+                            graveyard = []
+                            random.shuffle(deck)
+                        if event == sg.WIN_CLOSED:
+                            window.close()
+                    window.close()
+                except IndexError:
+                    print("That's the last card in your library.")
+                except:
+                    pass
+
+    except KeyboardInterrupt:
+        chosen = True
+        g = True
+        break
+    break
